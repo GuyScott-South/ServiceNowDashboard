@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { query } from "../lib/duckdb";
+import { query, rangeClause } from "../lib/duckdb";
 import {
   Ticket,
   CheckCircle,
@@ -11,8 +11,10 @@ import {
 } from "lucide-react";
 
 interface KpiCardsProps {
-  weekStart: string;
-  prevWeekStart: string;
+  from: string;
+  to: string;
+  prevFrom: string;
+  prevTo: string;
 }
 
 interface KpiData {
@@ -23,23 +25,28 @@ interface KpiData {
   color: string;
 }
 
-async function getKpisForWeek(weekStart: string) {
-  const ws = weekStart;
-  const we = `DATE '${ws}' + INTERVAL 7 DAY`;
+async function getKpisForRange(from: string, to: string) {
+  if (!from || !to) {
+    return { created: 0, resolved: 0, open: 0, sla: 100, mttr: 0, thirdParty: 0, flf: 0 };
+  }
+  // Created/open/SLA/MTTR/FLF are scoped by when the ticket was opened.
+  const opened = rangeClause("opened_at", from, to);
+  // Resolved volume is scoped by when the ticket was actually resolved.
+  const resolvedIn = rangeClause("resolved_at", from, to);
 
-  const [created, resolved, open, sla, mttr, thirdParty, flf] = await Promise.all([
-    query(`SELECT count(*) as v FROM tickets WHERE opened_at >= DATE '${ws}' AND opened_at < ${we}`),
-    query(`SELECT count(*) as v FROM tickets WHERE opened_at >= DATE '${ws}' AND opened_at < ${we}`),
-    query(`SELECT count(*) as v FROM tickets WHERE opened_at >= DATE '${ws}' AND opened_at < ${we} AND state NOT IN ('3','6')`),
+  const [created, resolved, open, sla, mttr, flf, thirdParty] = await Promise.all([
+    query(`SELECT count(*) as v FROM tickets WHERE ${opened}`),
+    query(`SELECT count(*) as v FROM tickets WHERE resolved_at IS NOT NULL AND ${resolvedIn}`),
+    query(`SELECT count(*) as v FROM tickets WHERE ${opened} AND state NOT IN ('3','6')`),
     query(`SELECT
       CASE WHEN count(*) = 0 THEN 100
       ELSE round(100 * sum(CASE WHEN CAST(u_asg_outside_sla_matrix AS VARCHAR) != 'true' THEN 1 ELSE 0 END) / count(*))
       END as v
-      FROM tickets WHERE opened_at >= DATE '${ws}' AND opened_at < ${we}`),
+      FROM tickets WHERE ${opened}`),
     query(`SELECT coalesce(round(avg(epoch(resolved_at - opened_at) / 3600), 1), 0) as v
-      FROM tickets WHERE opened_at >= DATE '${ws}' AND opened_at < ${we}`),
-    query(`SELECT count(*) as v FROM tickets WHERE opened_at >= DATE '${ws}' AND opened_at < ${we} AND (u_first_line_fix = true OR CAST(u_first_line_fix AS VARCHAR) = 'true')`),
-    query(`SELECT count(*) as v FROM tickets WHERE u_on_hold_state = 'With Third Party' AND opened_at >= DATE '${ws}' AND opened_at < ${we}`),
+      FROM tickets WHERE ${opened}`),
+    query(`SELECT count(*) as v FROM tickets WHERE ${opened} AND (u_first_line_fix = true OR CAST(u_first_line_fix AS VARCHAR) = 'true')`),
+    query(`SELECT count(*) as v FROM tickets WHERE u_on_hold_state = 'With Third Party' AND ${opened}`),
   ]);
 
   return {
@@ -53,14 +60,14 @@ async function getKpisForWeek(weekStart: string) {
   };
 }
 
-export function KpiCards({ weekStart, prevWeekStart }: KpiCardsProps) {
+export function KpiCards({ from, to, prevFrom, prevTo }: KpiCardsProps) {
   const [kpis, setKpis] = useState<KpiData[]>([]);
 
   useEffect(() => {
     (async () => {
       const [curr, prev] = await Promise.all([
-        getKpisForWeek(weekStart),
-        getKpisForWeek(prevWeekStart),
+        getKpisForRange(from, to),
+        getKpisForRange(prevFrom, prevTo),
       ]);
 
       const delta = (c: number, p: number) => (p === 0 ? null : c - p);
@@ -117,7 +124,7 @@ export function KpiCards({ weekStart, prevWeekStart }: KpiCardsProps) {
         },
       ]);
     })();
-  }, [weekStart, prevWeekStart]);
+  }, [from, to, prevFrom, prevTo]);
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
@@ -146,7 +153,7 @@ export function KpiCards({ weekStart, prevWeekStart }: KpiCardsProps) {
               }`}
             >
               {k.delta > 0 ? "+" : ""}
-              {k.delta} vs prior week
+              {k.delta} vs prior period
             </div>
           )}
         </div>

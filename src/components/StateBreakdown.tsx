@@ -1,22 +1,22 @@
 import { useEffect, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import { query } from "../lib/duckdb";
+import { query, rangeClause } from "../lib/duckdb";
 import { STATE_MAP, STATE_COLORS } from "../lib/constants";
 
 interface Props {
-  weekStart: string;
+  from: string;
+  to: string;
 }
 
-export function StateBreakdown({ weekStart }: Props) {
+export function StateBreakdown({ from, to }: Props) {
   const [data, setData] = useState<{ name: string; value: number }[]>([]);
 
   useEffect(() => {
+    if (!from || !to) return;
     (async () => {
-      const we = `DATE '${weekStart}' + INTERVAL 7 DAY`;
       const rows = await query<{ state: string; cnt: number }>(
         `SELECT state, count(*) as cnt FROM tickets
-         WHERE opened_at >= DATE '${weekStart}'
-         AND opened_at < ${we}
+         WHERE ${rangeClause("opened_at", from, to)}
          GROUP BY state ORDER BY cnt DESC`
       );
       setData(
@@ -26,7 +26,7 @@ export function StateBreakdown({ weekStart }: Props) {
         }))
       );
     })();
-  }, [weekStart]);
+  }, [from, to]);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700 shadow-sm">

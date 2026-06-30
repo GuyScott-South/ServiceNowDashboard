@@ -72,3 +72,22 @@ export async function getWeeks(): Promise<string[]> {
   );
   return rows.map((r) => String(r.week_start).slice(0, 10));
 }
+
+/** Earliest and latest opened_at dates in the data, as YYYY-MM-DD strings. */
+export async function getDateRange(): Promise<{ min: string; max: string }> {
+  const rows = await query<{ min_d: string; max_d: string }>(
+    "SELECT CAST(min(opened_at) AS VARCHAR) as min_d, CAST(max(opened_at) AS VARCHAR) as max_d FROM tickets WHERE opened_at IS NOT NULL"
+  );
+  return {
+    min: String(rows[0]?.min_d ?? "").slice(0, 10),
+    max: String(rows[0]?.max_d ?? "").slice(0, 10),
+  };
+}
+
+/**
+ * SQL predicate for an inclusive [from, to] date range on a timestamp column.
+ * The upper bound is exclusive of (to + 1 day) so the whole `to` day is included.
+ */
+export function rangeClause(col: string, from: string, to: string): string {
+  return `${col} >= DATE '${from}' AND ${col} < DATE '${to}' + INTERVAL 1 DAY`;
+}

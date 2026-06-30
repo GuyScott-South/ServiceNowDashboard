@@ -1,22 +1,22 @@
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { query } from "../lib/duckdb";
+import { query, rangeClause } from "../lib/duckdb";
 import { PRIORITY_SHORT, PRIORITY_COLORS } from "../lib/constants";
 
 interface Props {
-  weekStart: string;
+  from: string;
+  to: string;
 }
 
-export function PriorityChart({ weekStart }: Props) {
+export function PriorityChart({ from, to }: Props) {
   const [data, setData] = useState<{ name: string; value: number; priority: string }[]>([]);
 
   useEffect(() => {
+    if (!from || !to) return;
     (async () => {
-      const we = `DATE '${weekStart}' + INTERVAL 7 DAY`;
       const rows = await query<{ priority: string; cnt: number }>(
         `SELECT priority, count(*) as cnt FROM tickets
-         WHERE opened_at >= DATE '${weekStart}'
-         AND opened_at < ${we}
+         WHERE ${rangeClause("opened_at", from, to)}
          GROUP BY priority ORDER BY priority`
       );
       setData(
@@ -27,7 +27,7 @@ export function PriorityChart({ weekStart }: Props) {
         }))
       );
     })();
-  }, [weekStart]);
+  }, [from, to]);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700 shadow-sm">

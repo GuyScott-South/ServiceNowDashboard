@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo } from "react";
-import { query } from "../lib/duckdb";
+import { query, rangeClause } from "../lib/duckdb";
 import { STATE_MAP, PRIORITY_SHORT, formatDate } from "../lib/constants";
 import { ChevronUp, ChevronDown, Languages } from "lucide-react";
 import { translateBatch } from "../lib/translate";
 
 interface Props {
-  weekStart: string;
+  from: string;
+  to: string;
 }
 
 interface Ticket {
@@ -24,7 +25,7 @@ interface Ticket {
 
 type SortKey = keyof Ticket;
 
-export function TicketTable({ weekStart }: Props) {
+export function TicketTable({ from, to }: Props) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("opened_at");
   const [sortAsc, setSortAsc] = useState(false);
@@ -35,14 +36,13 @@ export function TicketTable({ weekStart }: Props) {
   const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
+    if (!from || !to) return;
     (async () => {
-      const we = "DATE '" + weekStart + "' + INTERVAL 7 DAY";
       const sql = "SELECT number, short_description, priority, state, opened_at, resolved_at, " +
         "CASE WHEN resolved_at IS NOT NULL THEN round(epoch(resolved_at - opened_at) / 3600, 1) ELSE NULL END as mttr_hours, " +
         "CAST(u_asg_outside_sla_matrix AS VARCHAR) as sla_breached, u_on_hold_state, sys_created_by, contact_type " +
         "FROM tickets " +
-        "WHERE opened_at >= DATE '" + weekStart + "' " +
-        "AND opened_at < " + we + " " +
+        "WHERE " + rangeClause("opened_at", from, to) + " " +
         "ORDER BY opened_at DESC";
       const rows = await query<Ticket>(sql);
       setTickets(
@@ -61,7 +61,7 @@ export function TicketTable({ weekStart }: Props) {
         }))
       );
     })();
-  }, [weekStart]);
+  }, [from, to]);
 
   const filtered = useMemo(() => {
     let list = tickets;

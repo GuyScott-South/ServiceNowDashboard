@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useTheme } from "./hooks/useTheme";
-import { initDuckDB, loadJSON, getWeeks } from "./lib/duckdb";
+import { initDuckDB, loadJSON, getWeeks, getDateRange } from "./lib/duckdb";
+import { addDays, daysInclusive } from "./lib/constants";
 import { Layout } from "./components/Layout";
 import { FileUpload } from "./components/FileUpload";
 import { KpiCards } from "./components/KpiCards";
@@ -18,8 +19,9 @@ export default function App() {
   const { dark, toggle } = useTheme();
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [weeks, setWeeks] = useState<string[]>([]);
-  const [selectedWeek, setSelectedWeek] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [bounds, setBounds] = useState({ min: "", max: "" });
   const [recordCount, setRecordCount] = useState(0);
   const [error, setError] = useState("");
 
@@ -32,12 +34,16 @@ export default function App() {
       setRecordCount(count);
 
       const wks = await getWeeks();
-      setWeeks(wks);
+      const range = await getDateRange();
+      setBounds(range);
 
-      // Default to the most recent full week (second in list if current partial week exists)
+      // Default the range to the most recent full week of data
       if (wks.length > 0) {
-        // Pick the most recent week that has data
-        setSelectedWeek(wks[0]);
+        setFrom(wks[0]);
+        setTo(addDays(wks[0], 6));
+      } else if (range.min && range.max) {
+        setFrom(range.min);
+        setTo(range.max);
       }
       setDataLoaded(true);
     } catch (e) {
@@ -47,23 +53,28 @@ export default function App() {
     }
   }, []);
 
-  // Derive previous week start from selected week
-  let prevWeekStart = "";
-  if (selectedWeek) {
-    const parts = String(selectedWeek).slice(0, 10).split("-");
-    if (parts.length === 3) {
-      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-      d.setDate(d.getDate() - 7);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      prevWeekStart = y + "-" + m + "-" + day;
-    }
+  const resetView = () => {
+    setDataLoaded(false);
+    setFrom("");
+    setTo("");
+    setBounds({ min: "", max: "" });
+  };
+
+  // Derive the prior comparison period: the equal-length window immediately
+  // before the selected range.
+  let prevFrom = "";
+  let prevTo = "";
+  if (from && to) {
+    const len = daysInclusive(from, to);
+    prevTo = addDays(from, -1);
+    prevFrom = addDays(prevTo, -(len - 1));
   }
+
+  const noop = () => {};
 
   if (loading) {
     return (
-      <Layout dark={dark} onToggleTheme={toggle} weeks={[]} selectedWeek="" onWeekChange={() => {}} dataLoaded={false}>
+      <Layout dark={dark} onToggleTheme={toggle} from="" to="" minDate="" maxDate="" onFromChange={noop} onToChange={noop} dataLoaded={false}>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
@@ -76,7 +87,7 @@ export default function App() {
 
   if (error) {
     return (
-      <Layout dark={dark} onToggleTheme={toggle} weeks={[]} selectedWeek="" onWeekChange={() => {}} dataLoaded={false}>
+      <Layout dark={dark} onToggleTheme={toggle} from="" to="" minDate="" maxDate="" onFromChange={noop} onToChange={noop} dataLoaded={false}>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 max-w-md">
             <p className="text-red-600 dark:text-red-400 font-medium">Error loading data</p>
@@ -95,7 +106,7 @@ export default function App() {
 
   if (!dataLoaded) {
     return (
-      <Layout dark={dark} onToggleTheme={toggle} weeks={[]} selectedWeek="" onWeekChange={() => {}} dataLoaded={false}>
+      <Layout dark={dark} onToggleTheme={toggle} from="" to="" minDate="" maxDate="" onFromChange={noop} onToChange={noop} dataLoaded={false}>
         <FileUpload onFileLoaded={handleFileLoaded} />
       </Layout>
     );
@@ -105,45 +116,48 @@ export default function App() {
     <Layout
       dark={dark}
       onToggleTheme={toggle}
-      weeks={weeks}
-      selectedWeek={selectedWeek}
-      onWeekChange={setSelectedWeek}
+      from={from}
+      to={to}
+      minDate={bounds.min}
+      maxDate={bounds.max}
+      onFromChange={setFrom}
+      onToChange={setTo}
       dataLoaded={dataLoaded}
     >
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {recordCount} records loaded &middot; Showing w/c {selectedWeek}
+          {recordCount} records loaded &middot; Showing {from} &rarr; {to}
         </p>
         <button
-          onClick={() => { setDataLoaded(false); setWeeks([]); setSelectedWeek(""); }}
+          onClick={resetView}
           className="text-sm text-blue-500 hover:text-blue-600 underline"
         >
           Upload new file
         </button>
       </div>
 
-      <KpiCards weekStart={selectedWeek} prevWeekStart={prevWeekStart} />
+      <KpiCards from={from} to={to} prevFrom={prevFrom} prevTo={prevTo} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <StateBreakdown weekStart={selectedWeek} />
-        <PriorityChart weekStart={selectedWeek} />
+        <StateBreakdown from={from} to={to} />
+        <PriorityChart from={from} to={to} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <VolumeTimeline />
-        <MttrChart weekStart={selectedWeek} />
+        <MttrChart from={from} to={to} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <ChannelMix weekStart={selectedWeek} />
-        <AgentActivity weekStart={selectedWeek} />
+        <ChannelMix from={from} to={to} />
+        <AgentActivity from={from} to={to} />
       </div>
 
       <div className="mb-4">
         <OnHoldAnalysis />
       </div>
 
-      <TicketTable weekStart={selectedWeek} />
+      <TicketTable from={from} to={to} />
     </Layout>
   );
 }
