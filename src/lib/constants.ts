@@ -83,7 +83,18 @@ export function daysInclusive(from: string, to: string): number {
 
 export function formatDate(d: string): string {
   if (!d) return "-";
-  const s = String(d).slice(0, 19);
+  // DuckDB may return TIMESTAMP columns as epoch-millisecond values; format those in UTC
+  // (DuckDB's tz-less timestamps are epoch-based as if UTC, so UTC getters reproduce the wall clock).
+  const raw = String(d);
+  if (/^\d{12,}$/.test(raw)) {
+    const dt = new Date(Number(raw));
+    if (!isNaN(dt.getTime())) {
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${p(dt.getUTCDate())}/${p(dt.getUTCMonth() + 1)}/${dt.getUTCFullYear()} ` +
+        `${p(dt.getUTCHours())}:${p(dt.getUTCMinutes())}:${p(dt.getUTCSeconds())}`;
+    }
+  }
+  const s = raw.slice(0, 19);
   const parts = s.split(/[T ]/);
   if (parts.length < 2) return s;
   const dp = parts[0].split("-");

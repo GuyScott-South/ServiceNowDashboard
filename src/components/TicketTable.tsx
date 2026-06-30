@@ -38,7 +38,8 @@ export function TicketTable({ from, to }: Props) {
   useEffect(() => {
     if (!from || !to) return;
     (async () => {
-      const sql = "SELECT number, short_description, priority, state, opened_at, resolved_at, " +
+      const sql = "SELECT number, short_description, priority, state, " +
+        "CAST(opened_at AS VARCHAR) as opened_at, CAST(resolved_at AS VARCHAR) as resolved_at, " +
         "CASE WHEN resolved_at IS NOT NULL THEN round(epoch(resolved_at - opened_at) / 3600, 1) ELSE NULL END as mttr_hours, " +
         "CAST(u_asg_outside_sla_matrix AS VARCHAR) as sla_breached, u_on_hold_state, sys_created_by, contact_type " +
         "FROM tickets " +
@@ -51,8 +52,8 @@ export function TicketTable({ from, to }: Props) {
           short_description: String(r.short_description),
           priority: String(r.priority),
           state: String(r.state),
-          opened_at: String(r.opened_at),
-          resolved_at: String(r.resolved_at),
+          opened_at: r.opened_at != null ? String(r.opened_at) : "",
+          resolved_at: r.resolved_at != null ? String(r.resolved_at) : "",
           mttr_hours: r.mttr_hours != null ? Number(r.mttr_hours) : null,
           sla_breached: String(r.sla_breached),
           u_on_hold_state: String(r.u_on_hold_state),
