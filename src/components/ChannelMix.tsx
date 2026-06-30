@@ -1,29 +1,29 @@
 import { useEffect, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import { query } from "../lib/duckdb";
+import { query, rangeClause } from "../lib/duckdb";
 import { CHART_COLORS } from "../lib/constants";
 
 interface Props {
-  weekStart: string;
+  from: string;
+  to: string;
 }
 
-export function ChannelMix({ weekStart }: Props) {
+export function ChannelMix({ from, to }: Props) {
   const [data, setData] = useState<{ name: string; value: number }[]>([]);
 
   useEffect(() => {
+    if (!from || !to) return;
     (async () => {
-      const we = `DATE '${weekStart}' + INTERVAL 7 DAY`;
       const rows = await query<{ contact_type: string; cnt: number }>(
         `SELECT CASE WHEN contact_type = '' THEN 'Unknown' ELSE contact_type END as contact_type,
                 count(*) as cnt
          FROM tickets
-         WHERE opened_at >= DATE '${weekStart}'
-         AND opened_at < ${we}
+         WHERE ${rangeClause("opened_at", from, to)}
          GROUP BY 1 ORDER BY cnt DESC`
       );
       setData(rows.map((r) => ({ name: String(r.contact_type), value: Number(r.cnt) })));
     })();
-  }, [weekStart]);
+  }, [from, to]);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700 shadow-sm">

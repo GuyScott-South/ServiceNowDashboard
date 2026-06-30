@@ -61,6 +61,26 @@ export function formatWeekLabel(monday: Date): string {
   return `w/c ${monday.toISOString().slice(0, 10)}`;
 }
 
+/** Add (or subtract) days to a YYYY-MM-DD string, returning YYYY-MM-DD. */
+export function addDays(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+/** Inclusive day count between two YYYY-MM-DD strings (from..to). */
+export function daysInclusive(from: string, to: string): number {
+  const [fy, fm, fd] = from.split("-").map(Number);
+  const [ty, tm, td] = to.split("-").map(Number);
+  const a = new Date(fy, fm - 1, fd).getTime();
+  const b = new Date(ty, tm - 1, td).getTime();
+  return Math.round((b - a) / 86400000) + 1;
+}
+
 export function formatDate(d: string): string {
   if (!d) return "-";
   const s = String(d).slice(0, 19);

@@ -1,25 +1,25 @@
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { query } from "../lib/duckdb";
+import { query, rangeClause } from "../lib/duckdb";
 import { PRIORITY_SHORT, PRIORITY_COLORS } from "../lib/constants";
 
 interface Props {
-  weekStart: string;
+  from: string;
+  to: string;
 }
 
-export function MttrChart({ weekStart }: Props) {
+export function MttrChart({ from, to }: Props) {
   const [data, setData] = useState<{ name: string; hours: number; priority: string }[]>([]);
 
   useEffect(() => {
+    if (!from || !to) return;
     (async () => {
-      const we = `DATE '${weekStart}' + INTERVAL 7 DAY`;
       const rows = await query<{ priority: string; avg_hours: number }>(
         `SELECT priority,
                 round(avg(epoch(resolved_at - opened_at) / 3600), 1) as avg_hours
          FROM tickets
          WHERE resolved_at IS NOT NULL
-         AND resolved_at >= DATE '${weekStart}'
-         AND resolved_at < ${we}
+         AND ${rangeClause("resolved_at", from, to)}
          GROUP BY priority ORDER BY priority`
       );
       setData(
@@ -30,7 +30,7 @@ export function MttrChart({ weekStart }: Props) {
         }))
       );
     })();
-  }, [weekStart]);
+  }, [from, to]);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700 shadow-sm">

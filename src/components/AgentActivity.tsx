@@ -1,22 +1,22 @@
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { query } from "../lib/duckdb";
+import { query, rangeClause } from "../lib/duckdb";
 
 interface Props {
-  weekStart: string;
+  from: string;
+  to: string;
 }
 
-export function AgentActivity({ weekStart }: Props) {
+export function AgentActivity({ from, to }: Props) {
   const [data, setData] = useState<{ name: string; tickets: number }[]>([]);
 
   useEffect(() => {
+    if (!from || !to) return;
     (async () => {
-      const we = `DATE '${weekStart}' + INTERVAL 7 DAY`;
       const rows = await query<{ agent: string; cnt: number }>(
         `SELECT sys_created_by as agent, count(*) as cnt
          FROM tickets
-         WHERE opened_at >= DATE '${weekStart}'
-         AND opened_at < ${we}
+         WHERE ${rangeClause("opened_at", from, to)}
          AND sys_created_by != ''
          GROUP BY sys_created_by ORDER BY cnt DESC`
       );
@@ -27,7 +27,7 @@ export function AgentActivity({ weekStart }: Props) {
         }))
       );
     })();
-  }, [weekStart]);
+  }, [from, to]);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700 shadow-sm">
